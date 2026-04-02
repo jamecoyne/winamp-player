@@ -1,28 +1,17 @@
-#!/usr/bin/env node
-"use strict";
+#!/usr/bin/env python3
+"""Winamp-style MP3 player — local web app."""
 
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-const url = require("url");
+import http.server
+import json
+import os
+import sys
+import urllib.parse
+import mimetypes
 
-const PORT = 8888;
+PORT = 8888
+MUSIC_DIR = None
 
-const musicDir = (() => {
-  const arg = process.argv[2];
-  if (!arg) {
-    console.error("Usage: node server.js /path/to/mp3/folder");
-    process.exit(1);
-  }
-  const resolved = path.resolve(arg);
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    console.error(`Error: '${resolved}' is not a directory`);
-    process.exit(1);
-  }
-  return resolved;
-})();
-
-const HTML_PAGE = `<!DOCTYPE html>
+HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -51,7 +40,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     user-select: none;
   }
 
-  /* Title Bar */
+  /* ── Title Bar ── */
   .title-bar {
     background: linear-gradient(90deg, #4a2c6a, #2c1a4a, #4a2c6a);
     padding: 3px 6px;
@@ -65,12 +54,14 @@ const HTML_PAGE = `<!DOCTYPE html>
     letter-spacing: 1px;
   }
   .title-dots { display: flex; gap: 3px; }
-  .title-dots div { width: 8px; height: 8px; border-radius: 50%; }
+  .title-dots div {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
   .dot-min { background: #e8c840; }
   .dot-max { background: #48c848; }
   .dot-close { background: #e84848; }
 
-  /* Display */
+  /* ── Display ── */
   .display {
     background: #0a0a12;
     margin: 6px 8px;
@@ -91,7 +82,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     overflow: hidden;
     max-width: 360px;
   }
-  #track-title.scrolling { animation: marquee 10s linear infinite; }
+  #track-title.scrolling {
+    animation: marquee 10s linear infinite;
+  }
   @keyframes marquee {
     0%   { transform: translateX(100%); }
     100% { transform: translateX(-100%); }
@@ -112,7 +105,6 @@ const HTML_PAGE = `<!DOCTYPE html>
   .viz-bar {
     position: absolute; bottom: 4px; right: 8px;
     display: flex; gap: 2px; align-items: flex-end; height: 30px;
-    pointer-events: none;
   }
   .viz-bar div {
     width: 3px;
@@ -120,7 +112,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     transition: height 0.08s;
   }
 
-  /* Seek Bar */
+  /* ── Seek Bar ── */
   .seek-section { margin: 4px 8px; }
   .seek-bar {
     -webkit-appearance: none; appearance: none;
@@ -140,29 +132,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     cursor: pointer;
   }
 
-  /* Waveform */
-  .waveform-section {
-    margin: 4px 8px;
-    position: relative;
-    height: 60px;
-    background: #050510;
-    border: 2px inset #333;
-    cursor: pointer;
-    overflow: hidden;
-  }
-  #waveform {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .waveform-loading {
-    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px; color: #335; pointer-events: none;
-  }
-
-  /* Controls */
+  /* ── Controls ── */
   .controls {
     display: flex; justify-content: center; align-items: center;
     gap: 4px; padding: 8px;
@@ -189,7 +159,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 100%);
   }
 
-  /* Volume */
+  /* ── Volume ── */
   .volume-section {
     display: flex; align-items: center; gap: 6px;
     padding: 0 8px 4px;
@@ -210,7 +180,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     cursor: pointer;
   }
 
-  /* Audio Device */
+  /* ── Audio Device ── */
   .device-section {
     padding: 4px 8px 6px;
     display: flex; align-items: center; gap: 6px;
@@ -228,7 +198,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     cursor: pointer;
   }
 
-  /* Playlist */
+  /* ── Playlist ── */
   .playlist-header {
     background: linear-gradient(90deg, #4a2c6a, #2c1a4a, #4a2c6a);
     padding: 3px 8px;
@@ -273,6 +243,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 <body>
 
 <div id="winamp">
+  <!-- Title Bar -->
   <div class="title-bar">
     <span>WINAMP 2.95</span>
     <div class="title-dots">
@@ -282,6 +253,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Display -->
   <div class="display">
     <div class="display-row">
       <div id="track-title">No track loaded</div>
@@ -293,15 +265,12 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="bitrate-info">MP3 &bull; STEREO &bull; LOCAL</div>
   </div>
 
+  <!-- Seek -->
   <div class="seek-section">
     <input type="range" class="seek-bar" id="seek" min="0" max="100" value="0">
   </div>
 
-  <div class="waveform-section" id="waveform-section">
-    <canvas id="waveform"></canvas>
-    <div class="waveform-loading" id="waveform-loading"></div>
-  </div>
-
+  <!-- Controls -->
   <div class="controls">
     <button class="ctrl-btn" onclick="prevTrack()" title="Previous">&#9198;</button>
     <button class="ctrl-btn play-btn" id="play-btn" onclick="togglePlay()" title="Play">&#9654;</button>
@@ -310,21 +279,24 @@ const HTML_PAGE = `<!DOCTYPE html>
     <button class="ctrl-btn" onclick="nextTrack()" title="Next">&#9197;</button>
   </div>
 
+  <!-- Volume -->
   <div class="volume-section">
     <span>VOL</span>
     <input type="range" class="volume-bar" id="volume" min="0" max="100" value="80">
   </div>
 
+  <!-- Audio Device -->
   <div class="device-section">
     <span>OUT</span>
     <select id="device-select"><option>Default</option></select>
   </div>
 
+  <!-- Playlist -->
   <div class="playlist-header">PLAYLIST</div>
   <div class="playlist" id="playlist"></div>
 </div>
 
-<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+<audio id="audio" preload="auto"></audio>
 
 <script>
 const audio = document.getElementById('audio');
@@ -335,19 +307,13 @@ const elapsedEl = document.getElementById('elapsed');
 const titleEl = document.getElementById('track-title');
 const vizEl = document.getElementById('viz');
 const deviceSelect = document.getElementById('device-select');
-const waveformCanvas = document.getElementById('waveform');
-const waveformCtx = waveformCanvas.getContext('2d');
-const waveformSection = document.getElementById('waveform-section');
-const waveformLoading = document.getElementById('waveform-loading');
 
 let tracks = [];
 let currentIndex = -1;
 let seeking = false;
-let selectedDeviceId = '';
 let audioCtx, analyser, source, vizBars = [];
-let waveformData = null;
-let waveformAnimId = null;
 
+// ── Init visualizer bars ──
 for (let i = 0; i < 16; i++) {
   const bar = document.createElement('div');
   bar.style.height = '2px';
@@ -355,6 +321,7 @@ for (let i = 0; i < 16; i++) {
   vizBars.push(bar);
 }
 
+// ── Load tracks ──
 fetch('/api/tracks')
   .then(r => r.json())
   .then(data => {
@@ -362,18 +329,16 @@ fetch('/api/tracks')
     tracks.forEach((t, i) => {
       const div = document.createElement('div');
       div.className = 'pl-item';
-      div.innerHTML = '<span class="pl-num">' + (i + 1) + '.</span><span class="pl-name">' + escapeHtml(t.replace(/\\.mp3$/i, '')) + '</span>';
+      div.innerHTML = `<span class="pl-num">${i + 1}.</span><span class="pl-name">${t.replace(/\.mp3$/i, '')}</span>`;
       div.onclick = () => loadTrack(i);
       playlistEl.appendChild(div);
     });
   });
 
-function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
+// ── Audio device enumeration ──
 async function loadDevices() {
   try {
+    // Need permission first
     await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
     const devices = await navigator.mediaDevices.enumerateDevices();
     const outputs = devices.filter(d => d.kind === 'audiooutput');
@@ -381,7 +346,7 @@ async function loadDevices() {
     outputs.forEach(d => {
       const opt = document.createElement('option');
       opt.value = d.deviceId;
-      opt.textContent = d.label || ('Device ' + d.deviceId.slice(0,8));
+      opt.textContent = d.label || `Device ${d.deviceId.slice(0,8)}`;
       deviceSelect.appendChild(opt);
     });
   } catch(e) {
@@ -391,31 +356,23 @@ async function loadDevices() {
 loadDevices();
 
 deviceSelect.onchange = async () => {
-  selectedDeviceId = deviceSelect.value;
-  if (typeof audio.setSinkId === 'function') {
+  if (audio.setSinkId) {
     try {
-      await audio.setSinkId(selectedDeviceId);
-      console.log('Output device set to:', deviceSelect.options[deviceSelect.selectedIndex].textContent);
+      await audio.setSinkId(deviceSelect.value);
     } catch(e) { console.error('setSinkId failed:', e); }
   }
 };
 
-async function loadTrack(idx) {
+// ── Playback ──
+function loadTrack(idx) {
   currentIndex = idx;
   const name = tracks[idx];
-  const trackUrl = '/music/' + encodeURIComponent(name);
-  audio.src = trackUrl;
-  // Re-apply selected output device — must be set before play()
-  if (selectedDeviceId && typeof audio.setSinkId === 'function') {
-    try { await audio.setSinkId(selectedDeviceId); }
-    catch(e) { console.error('setSinkId on load failed:', e); }
-  }
+  audio.src = '/music/' + encodeURIComponent(name);
   audio.play();
-  titleEl.textContent = name.replace(/\\.mp3$/i, '');
+  titleEl.textContent = name.replace(/\.mp3$/i, '');
   titleEl.classList.toggle('scrolling', titleEl.textContent.length > 40);
   highlightActive();
-  initViz();
-  generateWaveform(trackUrl);
+  initAnalyser();
 }
 
 function togglePlay() {
@@ -429,51 +386,42 @@ function nextTrack() { if (tracks.length === 0) return; loadTrack((currentIndex 
 
 audio.onended = () => nextTrack();
 
+// ── Seek ──
 audio.ontimeupdate = () => {
   if (!seeking && audio.duration) {
     seekBar.value = (audio.currentTime / audio.duration) * 100;
     const m = Math.floor(audio.currentTime / 60);
     const s = Math.floor(audio.currentTime % 60);
-    elapsedEl.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    elapsedEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
 };
-seekBar.addEventListener('pointerdown', () => { seeking = true; });
-seekBar.addEventListener('input', () => { seeking = true; });
-seekBar.addEventListener('change', () => {
-  if (audio.duration && isFinite(audio.duration)) {
-    audio.currentTime = (seekBar.value / 100) * audio.duration;
-  }
+seekBar.oninput = () => { seeking = true; };
+seekBar.onchange = () => {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
   seeking = false;
-});
+};
 
+// ── Volume ──
 audio.volume = 0.8;
 volumeBar.oninput = () => { audio.volume = volumeBar.value / 100; };
 
+// ── Highlight ──
 function highlightActive() {
   document.querySelectorAll('.pl-item').forEach((el, i) => {
     el.classList.toggle('active', i === currentIndex);
   });
 }
 
-// Use captureStream() for visualization so the <audio> element keeps
-// full control of output routing via setSinkId. We do NOT use
-// createMediaElementSource — that hijacks the element's output and
-// routes it through AudioContext.destination, breaking setSinkId.
-function initViz() {
-  if (analyser) return; // already set up
-  try {
+// ── Visualizer ──
+function initAnalyser() {
+  if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // captureStream() taps the audio without taking over output
-    const stream = audio.captureStream ? audio.captureStream() : audio.mozCaptureStream();
-    source = audioCtx.createMediaStreamSource(stream);
+    source = audioCtx.createMediaElementSource(audio);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-    // Do NOT connect analyser to audioCtx.destination — that would
-    // double-play the audio through the default device.
+    analyser.connect(audioCtx.destination);
     animateViz();
-  } catch(e) {
-    console.log('Visualizer init failed (captureStream not supported):', e);
   }
 }
 
@@ -487,208 +435,79 @@ function animateViz() {
   });
   requestAnimationFrame(animateViz);
 }
-
-// ── Waveform ──
-async function generateWaveform(url) {
-  waveformData = null;
-  waveformLoading.textContent = 'ANALYZING...';
-  drawWaveform();
-  try {
-    const resp = await fetch(url);
-    const arrayBuf = await resp.arrayBuffer();
-    const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const audioBuf = await decodeCtx.decodeAudioData(arrayBuf);
-    decodeCtx.close();
-
-    // Downsample to canvas-width number of bars
-    const raw = audioBuf.getChannelData(0);
-    const bars = Math.floor(waveformCanvas.width);
-    const blockSize = Math.floor(raw.length / bars);
-    const peaks = new Float32Array(bars);
-    for (let i = 0; i < bars; i++) {
-      let max = 0;
-      const start = i * blockSize;
-      for (let j = 0; j < blockSize; j++) {
-        const v = Math.abs(raw[start + j]);
-        if (v > max) max = v;
-      }
-      peaks[i] = max;
-    }
-    waveformData = peaks;
-    waveformLoading.textContent = '';
-    drawWaveform();
-    startWaveformAnim();
-  } catch(e) {
-    console.error('Waveform generation failed:', e);
-    waveformLoading.textContent = '';
-  }
-}
-
-function drawWaveform() {
-  const canvas = waveformCanvas;
-  const ctx = waveformCtx;
-  const dpr = window.devicePixelRatio || 1;
-  const rect = waveformSection.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  const w = rect.width;
-  const h = rect.height;
-
-  ctx.clearRect(0, 0, w, h);
-
-  if (!waveformData) return;
-
-  const pct = (audio.duration && isFinite(audio.duration))
-    ? audio.currentTime / audio.duration : 0;
-  const playX = pct * w;
-
-  // Resample waveformData to current width
-  const bars = waveformData.length;
-  const midY = h / 2;
-
-  for (let x = 0; x < w; x++) {
-    const idx = Math.floor((x / w) * bars);
-    const peak = waveformData[idx] || 0;
-    const barH = peak * midY * 0.95;
-
-    if (x < playX) {
-      // Played portion — darker blue
-      ctx.fillStyle = '#1a3a6a';
-    } else {
-      // Unplayed — bright blue with intensity based on amplitude
-      const brightness = 0.4 + peak * 0.6;
-      const r = Math.floor(30 * brightness);
-      const g = Math.floor(120 * brightness);
-      const b = Math.floor(255 * brightness);
-      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-    }
-
-    ctx.fillRect(x, midY - barH, 1, barH * 2);
-  }
-
-  // Playhead line
-  if (pct > 0) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(Math.floor(playX), 0, 1, h);
-  }
-}
-
-function startWaveformAnim() {
-  if (waveformAnimId) cancelAnimationFrame(waveformAnimId);
-  function tick() {
-    drawWaveform();
-    waveformAnimId = requestAnimationFrame(tick);
-  }
-  tick();
-}
-
-// Click-to-seek on waveform
-waveformSection.addEventListener('pointerdown', (e) => {
-  seeking = true;
-  seekFromWaveform(e);
-});
-waveformSection.addEventListener('pointermove', (e) => {
-  if (seeking && e.buttons > 0) seekFromWaveform(e);
-});
-waveformSection.addEventListener('pointerup', () => { seeking = false; });
-
-function seekFromWaveform(e) {
-  const rect = waveformSection.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (audio.duration && isFinite(audio.duration)) {
-    audio.currentTime = pct * audio.duration;
-    seekBar.value = pct * 100;
-  }
-}
 </script>
 </body>
-</html>`;
+</html>"""
 
-const MIME_TYPES = {
-  ".mp3": "audio/mpeg",
-  ".html": "text/html",
-  ".json": "application/json",
-};
 
-const server = http.createServer((req, res) => {
-  const parsed = url.parse(req.url);
-  const pathname = decodeURIComponent(parsed.pathname);
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
 
-  if (pathname === "/" || pathname === "/index.html") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(HTML_PAGE);
-    return;
-  }
+        if path == "/" or path == "/index.html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(HTML_PAGE.encode())
 
-  if (pathname === "/api/tracks") {
-    const files = fs
-      .readdirSync(musicDir)
-      .filter((f) => f.toLowerCase().endsWith(".mp3"))
-      .sort();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(files));
-    return;
-  }
+        elif path == "/api/tracks":
+            files = sorted(
+                f for f in os.listdir(MUSIC_DIR)
+                if f.lower().endswith(".mp3")
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(files).encode())
 
-  if (pathname.startsWith("/music/")) {
-    const filename = pathname.slice(7);
-    // Prevent path traversal
-    if (
-      filename.includes("/") ||
-      filename.includes("\\") ||
-      filename.includes("..")
-    ) {
-      res.writeHead(403);
-      res.end("Forbidden");
-      return;
-    }
-    const filepath = path.join(musicDir, filename);
-    if (!fs.existsSync(filepath) || !fs.statSync(filepath).isFile()) {
-      res.writeHead(404);
-      res.end("Not found");
-      return;
-    }
+        elif path.startswith("/music/"):
+            filename = urllib.parse.unquote(path[7:])
+            # Prevent path traversal
+            if "/" in filename or "\\" in filename or ".." in filename:
+                self.send_error(403)
+                return
+            filepath = os.path.join(MUSIC_DIR, filename)
+            if not os.path.isfile(filepath):
+                self.send_error(404)
+                return
+            self.send_response(200)
+            mime = mimetypes.guess_type(filepath)[0] or "audio/mpeg"
+            self.send_header("Content-Type", mime)
+            size = os.path.getsize(filepath)
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with open(filepath, "rb") as f:
+                while chunk := f.read(65536):
+                    self.wfile.write(chunk)
+        else:
+            self.send_error(404)
 
-    const stat = fs.statSync(filepath);
-    const ext = path.extname(filepath).toLowerCase();
-    const mime = MIME_TYPES[ext] || "application/octet-stream";
-    const total = stat.size;
-    const range = req.headers.range;
+    def log_message(self, fmt, *args):
+        pass  # quiet
 
-    if (range) {
-      const match = range.match(/bytes=(\d*)-(\d*)/);
-      const start = match[1] ? parseInt(match[1], 10) : 0;
-      const end = match[2] ? parseInt(match[2], 10) : total - 1;
-      res.writeHead(206, {
-        "Content-Type": mime,
-        "Content-Range": "bytes " + start + "-" + end + "/" + total,
-        "Accept-Ranges": "bytes",
-        "Content-Length": end - start + 1,
-        "Access-Control-Allow-Origin": "*",
-      });
-      fs.createReadStream(filepath, { start, end }).pipe(res);
-    } else {
-      res.writeHead(200, {
-        "Content-Type": mime,
-        "Content-Length": total,
-        "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
-      });
-      fs.createReadStream(filepath).pipe(res);
-    }
-    return;
-  }
 
-  res.writeHead(404);
-  res.end("Not found");
-});
+def main():
+    global MUSIC_DIR
+    if len(sys.argv) < 2:
+        print("Usage: python server.py /path/to/mp3/folder")
+        sys.exit(1)
+    MUSIC_DIR = os.path.abspath(sys.argv[1])
+    if not os.path.isdir(MUSIC_DIR):
+        print(f"Error: '{MUSIC_DIR}' is not a directory")
+        sys.exit(1)
 
-const mp3Count = fs
-  .readdirSync(musicDir)
-  .filter((f) => f.toLowerCase().endsWith(".mp3")).length;
+    mp3s = [f for f in os.listdir(MUSIC_DIR) if f.lower().endswith(".mp3")]
+    print(f"Serving {len(mp3s)} MP3 files from: {MUSIC_DIR}")
+    print(f"Open http://localhost:{PORT} in your browser")
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Serving ${mp3Count} MP3 files from: ${musicDir}`);
-  console.log(`Open http://localhost:${PORT} in your browser`);
-});
+    server = http.server.HTTPServer(("127.0.0.1", PORT), Handler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down.")
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
