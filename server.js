@@ -26,352 +26,620 @@ const HTML_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Winamp Player</title>
+<title>WinDJ</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   body {
-    background: #1a1a2e;
-    display: flex; justify-content: center; align-items: center;
-    min-height: 100vh;
-    font-family: 'Arial', sans-serif;
+    background: #0e0e1a;
+    display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh; padding: 20px;
+    font-family: Arial, sans-serif;
+  }
+
+  #dj-booth {
+    display: flex; gap: 0; user-select: none;
+    background: linear-gradient(180deg, #1a1a2a 0%, #12121e 100%);
+    border: 2px solid #555; border-top-color: #888; border-left-color: #888;
+    border-radius: 3px;
+    box-shadow: 6px 6px 20px rgba(0,0,0,0.9), inset 0 0 2px #555;
     overflow: hidden;
   }
 
-  #winamp {
-    width: 520px;
-    background: linear-gradient(180deg, #2a2a3a 0%, #1e1e2e 100%);
-    border: 2px solid #555;
-    border-top-color: #888;
-    border-left-color: #888;
-    border-radius: 2px;
-    box-shadow: 4px 4px 12px rgba(0,0,0,0.8), inset 0 0 1px #666;
-    user-select: none;
-  }
+  /* ── Deck ── */
+  .deck { width: 420px; padding: 0; flex-shrink: 0; }
 
-  /* Title Bar */
-  .title-bar {
+  .deck-header {
     background: linear-gradient(90deg, #4a2c6a, #2c1a4a, #4a2c6a);
-    padding: 3px 6px;
+    padding: 4px 8px;
     display: flex; align-items: center; justify-content: space-between;
     border-bottom: 1px solid #333;
   }
-  .title-bar span {
+  .deck-header span {
     font-family: 'Press Start 2P', monospace;
-    font-size: 8px;
-    color: #c8b8e8;
-    letter-spacing: 1px;
+    font-size: 8px; color: #c8b8e8; letter-spacing: 1px;
   }
-  .title-dots { display: flex; gap: 3px; }
-  .title-dots div { width: 8px; height: 8px; border-radius: 50%; }
-  .dot-min { background: #e8c840; }
-  .dot-max { background: #48c848; }
-  .dot-close { background: #e84848; }
+  .deck-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px; font-weight: bold;
+  }
+  .deck-a .deck-label { color: #4488ff; }
+  .deck-b .deck-label { color: #ff6644; }
 
-  /* Display */
   .display {
-    background: #0a0a12;
-    margin: 6px 8px;
-    padding: 10px 12px;
-    border: 2px inset #333;
-    border-radius: 2px;
-    min-height: 70px;
-    position: relative;
-    overflow: hidden;
+    background: #0a0a12; margin: 6px 8px; padding: 8px 10px;
+    border: 2px inset #333; border-radius: 2px;
+    min-height: 58px; position: relative; overflow: hidden;
   }
   .display-row { display: flex; justify-content: space-between; align-items: center; }
-  #track-title {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 9px;
-    color: #00e800;
-    white-space: nowrap;
-    text-shadow: 0 0 6px #00e800;
-    overflow: hidden;
-    max-width: 360px;
+  .track-title {
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    white-space: nowrap; text-shadow: 0 0 6px currentColor;
+    overflow: hidden; max-width: 280px;
   }
-  #track-title.scrolling { animation: marquee 10s linear infinite; }
-  @keyframes marquee {
-    0%   { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
-  }
+  .deck-a .track-title { color: #4488ff; }
+  .deck-b .track-title { color: #ff6644; }
+  .track-title.scrolling { animation: marquee 10s linear infinite; }
+  @keyframes marquee { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
   .time-display {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 16px;
-    color: #00e800;
-    text-shadow: 0 0 8px #00e800;
-    letter-spacing: 2px;
+    font-family: 'Press Start 2P', monospace; font-size: 14px;
+    text-shadow: 0 0 8px currentColor; letter-spacing: 2px;
   }
+  .deck-a .time-display { color: #4488ff; }
+  .deck-b .time-display { color: #ff6644; }
   .bitrate-info {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px;
-    color: #008800;
-    margin-top: 6px;
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    color: #444; margin-top: 4px;
   }
   .viz-bar {
     position: absolute; bottom: 4px; right: 8px;
-    display: flex; gap: 2px; align-items: flex-end; height: 30px;
+    display: flex; gap: 2px; align-items: flex-end; height: 24px;
     pointer-events: none;
   }
-  .viz-bar div {
-    width: 3px;
-    background: linear-gradient(to top, #00e800, #e8e800, #e84800);
+  .deck-a .viz-bar div {
+    width: 3px; background: linear-gradient(to top, #4488ff, #88ccff, #ffffff);
     transition: height 0.08s;
   }
-
-  /* Seek Bar */
-  .seek-section { margin: 4px 8px; }
-  .seek-bar {
-    -webkit-appearance: none; appearance: none;
-    width: 100%; height: 8px;
-    background: #1a1a2a;
-    border: 1px inset #333;
-    border-radius: 1px;
-    outline: none;
-    cursor: pointer;
-  }
-  .seek-bar::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 14px; height: 14px;
-    background: linear-gradient(135deg, #bbb, #666);
-    border: 1px solid #888;
-    border-radius: 2px;
-    cursor: pointer;
+  .deck-b .viz-bar div {
+    width: 3px; background: linear-gradient(to top, #ff6644, #ffaa66, #ffffff);
+    transition: height 0.08s;
   }
 
   /* Waveform */
   .waveform-section {
-    margin: 4px 8px;
-    position: relative;
-    height: 60px;
-    background: #050510;
-    border: 2px inset #333;
-    cursor: pointer;
-    overflow: hidden;
+    margin: 4px 8px; position: relative; height: 50px;
+    background: #050510; border: 2px inset #333;
+    cursor: pointer; overflow: hidden;
   }
-  #waveform {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
+  .waveform-section canvas { width: 100%; height: 100%; display: block; }
   .waveform-loading {
     position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px; color: #335; pointer-events: none;
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+    color: #335; pointer-events: none;
   }
 
   /* Controls */
   .controls {
     display: flex; justify-content: center; align-items: center;
-    gap: 4px; padding: 8px;
+    gap: 3px; padding: 6px 8px;
   }
   .ctrl-btn {
     background: linear-gradient(180deg, #555 0%, #333 100%);
-    border: 1px outset #666;
-    color: #ddd;
-    font-size: 14px;
-    width: 38px; height: 26px;
-    cursor: pointer;
+    border: 1px outset #666; color: #ddd; font-size: 12px;
+    width: 34px; height: 24px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     border-radius: 2px;
   }
-  .ctrl-btn:active {
-    border-style: inset;
-    background: linear-gradient(180deg, #333 0%, #555 100%);
-  }
-  .ctrl-btn.play-btn {
-    background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 100%);
-    width: 44px;
-  }
-  .ctrl-btn.stop-btn {
-    background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 100%);
-  }
-
-  /* Volume */
-  .volume-section {
-    display: flex; align-items: center; gap: 6px;
-    padding: 0 8px 4px;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px; color: #888;
-  }
-  .volume-bar {
-    -webkit-appearance: none; appearance: none;
-    width: 100px; height: 6px;
-    background: #1a1a2a; border: 1px inset #333;
-    outline: none; cursor: pointer;
-  }
-  .volume-bar::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 10px; height: 12px;
-    background: linear-gradient(135deg, #bbb, #666);
-    border: 1px solid #888; border-radius: 1px;
-    cursor: pointer;
-  }
-
-  /* Audio Device */
-  .device-section {
-    padding: 4px 8px 6px;
-    display: flex; align-items: center; gap: 6px;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px; color: #888;
-  }
-  #device-select {
-    flex: 1;
-    background: #0a0a12; color: #00cc00;
-    border: 1px inset #333;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px;
-    padding: 3px;
-    outline: none;
-    cursor: pointer;
-  }
+  .ctrl-btn:active { border-style: inset; background: linear-gradient(180deg, #333 0%, #555 100%); }
+  .ctrl-btn.play-btn { background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 100%); width: 40px; }
+  .ctrl-btn.stop-btn { background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 100%); }
 
   /* Playlist */
   .playlist-header {
     background: linear-gradient(90deg, #4a2c6a, #2c1a4a, #4a2c6a);
     padding: 3px 8px;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 7px; color: #c8b8e8;
-    letter-spacing: 1px;
-    border-top: 1px solid #555;
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    color: #c8b8e8; letter-spacing: 1px; border-top: 1px solid #555;
   }
   .playlist {
-    background: #0a0a12;
-    margin: 0 8px 8px;
-    border: 2px inset #333;
-    max-height: 320px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #4a2c6a #0a0a12;
+    background: #0a0a12; margin: 0 8px 8px; border: 2px inset #333;
+    max-height: 180px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: #4a2c6a #0a0a12;
   }
-  .playlist::-webkit-scrollbar { width: 12px; }
+  .playlist::-webkit-scrollbar { width: 10px; }
   .playlist::-webkit-scrollbar-track { background: #0a0a12; }
-  .playlist::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #4a2c6a, #2c1a4a);
-    border: 1px solid #555;
-  }
+  .playlist::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #4a2c6a, #2c1a4a); border: 1px solid #555; }
   .pl-item {
-    padding: 4px 8px;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 8px;
-    color: #00cc00;
-    cursor: pointer;
-    display: flex; gap: 8px;
-    border-bottom: 1px solid #111;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 3px 6px; font-family: 'Press Start 2P', monospace; font-size: 7px;
+    color: #00cc00; cursor: pointer; display: flex; gap: 6px;
+    border-bottom: 1px solid #111; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
   }
   .pl-item:hover { background: #1a1a3a; color: #00ff00; }
   .pl-item.active { background: #2a1a4a; color: #e8e800; }
-  .pl-num { color: #666; min-width: 30px; text-align: right; }
+  .pl-num { color: #666; min-width: 24px; text-align: right; }
   .pl-name { overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Mixer ── */
+  .mixer {
+    width: 160px; flex-shrink: 0;
+    background: linear-gradient(180deg, #222233 0%, #181828 100%);
+    border-left: 1px solid #444; border-right: 1px solid #444;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0;
+  }
+  .mixer-header {
+    background: linear-gradient(90deg, #6a2c4a, #4a1a2c, #6a2c4a);
+    padding: 4px 8px; width: 100%; text-align: center;
+    border-bottom: 1px solid #333;
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    color: #e8b8c8; letter-spacing: 1px;
+  }
+
+  .mixer-channels {
+    display: flex; gap: 12px; padding: 10px 8px; flex: 1;
+    justify-content: center; align-items: stretch;
+  }
+  .mixer-ch {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .mixer-ch-label {
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+  }
+  .ch-a-label { color: #4488ff; }
+  .ch-b-label { color: #ff6644; }
+  .ch-fader {
+    -webkit-appearance: slider-vertical; appearance: slider-vertical;
+    width: 20px; height: 120px;
+    background: #0a0a12; border: 1px inset #333;
+    outline: none; cursor: pointer;
+    writing-mode: vertical-lr;
+    direction: rtl;
+  }
+  .ch-fader::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 24px; height: 10px;
+    background: linear-gradient(180deg, #bbb, #666);
+    border: 1px solid #888; border-radius: 2px; cursor: pointer;
+  }
+  .vu-meter {
+    width: 12px; height: 120px; background: #0a0a12;
+    border: 1px inset #333; position: relative; overflow: hidden;
+  }
+  .vu-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(to top, #00cc00, #cccc00, #cc0000);
+    transition: height 0.08s;
+  }
+
+  .mixer-section {
+    width: 100%; padding: 6px 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .mixer-label {
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    color: #888; letter-spacing: 1px;
+  }
+
+  /* Crossfader */
+  .crossfader-section {
+    width: 100%; padding: 8px 10px 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    border-top: 1px solid #333;
+  }
+  .crossfader {
+    -webkit-appearance: none; appearance: none;
+    width: 130px; height: 10px;
+    background: #0a0a12; border: 1px inset #333;
+    border-radius: 1px; outline: none; cursor: pointer;
+  }
+  .crossfader::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px;
+    background: linear-gradient(135deg, #ddd, #888);
+    border: 1px solid #aaa; border-radius: 2px; cursor: pointer;
+  }
+  .cf-labels {
+    display: flex; justify-content: space-between; width: 130px;
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+  }
+  .cf-labels .cf-a { color: #4488ff; }
+  .cf-labels .cf-b { color: #ff6644; }
+
+  /* Device select */
+  .device-section {
+    width: 100%; padding: 6px 10px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    border-top: 1px solid #333;
+  }
+  .device-select {
+    width: 100%;
+    background: #0a0a12; color: #00cc00;
+    border: 1px inset #333;
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    padding: 3px; outline: none; cursor: pointer;
+  }
 </style>
 </head>
 <body>
 
-<div id="winamp">
-  <div class="title-bar">
-    <span>WINAMP 2.95</span>
-    <div class="title-dots">
-      <div class="dot-min"></div>
-      <div class="dot-max"></div>
-      <div class="dot-close"></div>
+<div id="dj-booth">
+  <!-- DECK A -->
+  <div class="deck deck-a" id="deck-a">
+    <div class="deck-header">
+      <span class="deck-label">DECK A</span>
+      <span>WinDJ</span>
+    </div>
+    <div class="display">
+      <div class="display-row">
+        <div class="track-title" data-el="title">No track loaded</div>
+      </div>
+      <div class="display-row" style="margin-top:6px">
+        <div class="time-display"><span data-el="elapsed">00:00</span></div>
+        <div class="viz-bar" data-el="viz"></div>
+      </div>
+      <div class="bitrate-info">MP3 &bull; STEREO</div>
+    </div>
+    <div class="waveform-section" data-el="waveform-section">
+      <canvas data-el="waveform"></canvas>
+      <div class="waveform-loading" data-el="waveform-loading"></div>
+    </div>
+    <div class="controls">
+      <button class="ctrl-btn" data-action="prev" title="Previous">&#9198;</button>
+      <button class="ctrl-btn play-btn" data-action="play" title="Play">&#9654;</button>
+      <button class="ctrl-btn" data-action="pause" title="Pause">&#9208;</button>
+      <button class="ctrl-btn stop-btn" data-action="stop" title="Stop">&#9632;</button>
+      <button class="ctrl-btn" data-action="next" title="Next">&#9197;</button>
+    </div>
+    <div class="playlist-header">PLAYLIST</div>
+    <div class="playlist" data-el="playlist"></div>
+  </div>
+
+  <!-- MIXER -->
+  <div class="mixer">
+    <div class="mixer-header">MIXER</div>
+    <div class="mixer-channels">
+      <div class="mixer-ch">
+        <span class="mixer-ch-label ch-a-label">A</span>
+        <div class="vu-meter"><div class="vu-fill" id="vu-a"></div></div>
+        <input type="range" class="ch-fader" id="fader-a" min="0" max="100" value="80">
+      </div>
+      <div class="mixer-ch">
+        <span class="mixer-ch-label ch-b-label">B</span>
+        <div class="vu-meter"><div class="vu-fill" id="vu-b"></div></div>
+        <input type="range" class="ch-fader" id="fader-b" min="0" max="100" value="80">
+      </div>
+    </div>
+    <div class="crossfader-section">
+      <span class="mixer-label">CROSSFADER</span>
+      <input type="range" class="crossfader" id="crossfader" min="0" max="100" value="50">
+      <div class="cf-labels"><span class="cf-a">A</span><span class="cf-b">B</span></div>
+    </div>
+    <div class="device-section">
+      <span class="mixer-label">OUTPUT</span>
+      <select class="device-select" id="device-select"><option>Default</option></select>
     </div>
   </div>
 
-  <div class="display">
-    <div class="display-row">
-      <div id="track-title">No track loaded</div>
+  <!-- DECK B -->
+  <div class="deck deck-b" id="deck-b">
+    <div class="deck-header">
+      <span class="deck-label">DECK B</span>
+      <span>WinDJ</span>
     </div>
-    <div class="display-row" style="margin-top:8px">
-      <div class="time-display"><span id="elapsed">00:00</span></div>
-      <div class="viz-bar" id="viz"></div>
+    <div class="display">
+      <div class="display-row">
+        <div class="track-title" data-el="title">No track loaded</div>
+      </div>
+      <div class="display-row" style="margin-top:6px">
+        <div class="time-display"><span data-el="elapsed">00:00</span></div>
+        <div class="viz-bar" data-el="viz"></div>
+      </div>
+      <div class="bitrate-info">MP3 &bull; STEREO</div>
     </div>
-    <div class="bitrate-info">MP3 &bull; STEREO &bull; LOCAL</div>
+    <div class="waveform-section" data-el="waveform-section">
+      <canvas data-el="waveform"></canvas>
+      <div class="waveform-loading" data-el="waveform-loading"></div>
+    </div>
+    <div class="controls">
+      <button class="ctrl-btn" data-action="prev" title="Previous">&#9198;</button>
+      <button class="ctrl-btn play-btn" data-action="play" title="Play">&#9654;</button>
+      <button class="ctrl-btn" data-action="pause" title="Pause">&#9208;</button>
+      <button class="ctrl-btn stop-btn" data-action="stop" title="Stop">&#9632;</button>
+      <button class="ctrl-btn" data-action="next" title="Next">&#9197;</button>
+    </div>
+    <div class="playlist-header">PLAYLIST</div>
+    <div class="playlist" data-el="playlist"></div>
   </div>
-
-  <div class="seek-section">
-    <input type="range" class="seek-bar" id="seek" min="0" max="100" value="0">
-  </div>
-
-  <div class="waveform-section" id="waveform-section">
-    <canvas id="waveform"></canvas>
-    <div class="waveform-loading" id="waveform-loading"></div>
-  </div>
-
-  <div class="controls">
-    <button class="ctrl-btn" onclick="prevTrack()" title="Previous">&#9198;</button>
-    <button class="ctrl-btn play-btn" id="play-btn" onclick="togglePlay()" title="Play">&#9654;</button>
-    <button class="ctrl-btn" onclick="pauseTrack()" title="Pause">&#9208;</button>
-    <button class="ctrl-btn stop-btn" onclick="stopTrack()" title="Stop">&#9632;</button>
-    <button class="ctrl-btn" onclick="nextTrack()" title="Next">&#9197;</button>
-  </div>
-
-  <div class="volume-section">
-    <span>VOL</span>
-    <input type="range" class="volume-bar" id="volume" min="0" max="100" value="80">
-  </div>
-
-  <div class="device-section">
-    <span>OUT</span>
-    <select id="device-select"><option>Default</option></select>
-  </div>
-
-  <div class="playlist-header">PLAYLIST</div>
-  <div class="playlist" id="playlist"></div>
 </div>
 
-<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+<audio id="audio-a" preload="auto" crossorigin="anonymous"></audio>
+<audio id="audio-b" preload="auto" crossorigin="anonymous"></audio>
 
 <script>
-const audio = document.getElementById('audio');
-const playlistEl = document.getElementById('playlist');
-const seekBar = document.getElementById('seek');
-const volumeBar = document.getElementById('volume');
-const elapsedEl = document.getElementById('elapsed');
-const titleEl = document.getElementById('track-title');
-const vizEl = document.getElementById('viz');
-const deviceSelect = document.getElementById('device-select');
-const waveformCanvas = document.getElementById('waveform');
-const waveformCtx = waveformCanvas.getContext('2d');
-const waveformSection = document.getElementById('waveform-section');
-const waveformLoading = document.getElementById('waveform-loading');
-
-let tracks = [];
-let currentIndex = -1;
-let seeking = false;
-let selectedDeviceId = '';
-let audioCtx, analyser, source, vizBars = [];
-let waveformData = null;
-let waveformAnimId = null;
-
-for (let i = 0; i < 16; i++) {
-  const bar = document.createElement('div');
-  bar.style.height = '2px';
-  vizEl.appendChild(bar);
-  vizBars.push(bar);
-}
-
-fetch('/api/tracks')
-  .then(r => r.json())
-  .then(data => {
-    tracks = data;
-    tracks.forEach((t, i) => {
-      const div = document.createElement('div');
-      div.className = 'pl-item';
-      div.innerHTML = '<span class="pl-num">' + (i + 1) + '.</span><span class="pl-name">' + escapeHtml(t.replace(/\\.mp3$/i, '')) + '</span>';
-      div.onclick = () => loadTrack(i);
-      playlistEl.appendChild(div);
-    });
-  });
-
+// ── Utility ──
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function fmt(t) {
+  const m = Math.floor(t / 60), s = Math.floor(t % 60);
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
 
+// ── Deck class ──
+function Deck(id, audioEl, color) {
+  const root = document.getElementById(id);
+  const el = (sel) => root.querySelector('[data-el="' + sel + '"]');
+
+  this.audio = audioEl;
+  this.color = color;
+  this.titleEl = el('title');
+  this.elapsedEl = el('elapsed');
+  this.vizEl = el('viz');
+  this.waveformCanvas = el('waveform');
+  this.waveformCtx = el('waveform').getContext('2d');
+  this.waveformSection = el('waveform-section');
+  this.waveformLoading = el('waveform-loading');
+  this.playlistEl = el('playlist');
+  this.tracks = [];
+  this.currentIndex = -1;
+  this.seeking = false;
+  this.waveformData = null;
+  this.waveformAnimId = null;
+  this.analyser = null;
+  this.audioCtx = null;
+  this.vizBars = [];
+  this.channelVol = 0.8;
+  this.mixVol = 1;
+
+  // Viz bars
+  for (let i = 0; i < 12; i++) {
+    const bar = document.createElement('div');
+    bar.style.height = '2px';
+    this.vizEl.appendChild(bar);
+    this.vizBars.push(bar);
+  }
+
+  // Controls
+  const self = this;
+  root.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const a = btn.getAttribute('data-action');
+      if (a === 'play') self.togglePlay();
+      else if (a === 'pause') self.audio.pause();
+      else if (a === 'stop') { self.audio.pause(); self.audio.currentTime = 0; }
+      else if (a === 'prev') self.skipTrack(-1);
+      else if (a === 'next') self.skipTrack(1);
+    });
+  });
+
+  // Time update
+  this.audio.ontimeupdate = () => {
+    if (!self.seeking && self.audio.duration) {
+      self.elapsedEl.textContent = fmt(self.audio.currentTime);
+    }
+  };
+  this.audio.onended = () => self.skipTrack(1);
+  this.audio.volume = this.channelVol;
+
+  // Waveform seek
+  this.waveformSection.addEventListener('pointerdown', (e) => { self.seeking = true; self.seekFromWaveform(e); });
+  this.waveformSection.addEventListener('pointermove', (e) => { if (self.seeking && e.buttons > 0) self.seekFromWaveform(e); });
+  this.waveformSection.addEventListener('pointerup', () => { self.seeking = false; });
+}
+
+Deck.prototype.populatePlaylist = function(tracks) {
+  this.tracks = tracks;
+  const self = this;
+  this.playlistEl.innerHTML = '';
+  tracks.forEach((t, i) => {
+    const div = document.createElement('div');
+    div.className = 'pl-item';
+    div.innerHTML = '<span class="pl-num">' + (i+1) + '.</span><span class="pl-name">' + escapeHtml(t.replace(/\\.mp3$/i,'')) + '</span>';
+    div.onclick = () => self.loadTrack(i);
+    self.playlistEl.appendChild(div);
+  });
+};
+
+Deck.prototype.loadTrack = async function(idx) {
+  this.currentIndex = idx;
+  const name = this.tracks[idx];
+  const url = '/music/' + encodeURIComponent(name);
+  this.audio.src = url;
+  if (selectedDeviceId && typeof this.audio.setSinkId === 'function') {
+    try { await this.audio.setSinkId(selectedDeviceId); } catch(e) {}
+  }
+  this.audio.play();
+  this.titleEl.textContent = name.replace(/\\.mp3$/i,'');
+  this.titleEl.classList.toggle('scrolling', this.titleEl.textContent.length > 30);
+  this.highlightActive();
+  this.initViz();
+  this.generateWaveform(url);
+  this.applyVolume();
+};
+
+Deck.prototype.togglePlay = function() {
+  if (this.currentIndex < 0 && this.tracks.length > 0) { this.loadTrack(0); return; }
+  if (this.audio.paused) this.audio.play(); else this.audio.pause();
+};
+
+Deck.prototype.skipTrack = function(dir) {
+  if (this.tracks.length === 0) return;
+  this.loadTrack((this.currentIndex + dir + this.tracks.length) % this.tracks.length);
+};
+
+Deck.prototype.highlightActive = function() {
+  this.playlistEl.querySelectorAll('.pl-item').forEach((el, i) => {
+    el.classList.toggle('active', i === this.currentIndex);
+  });
+};
+
+Deck.prototype.applyVolume = function() {
+  this.audio.volume = this.channelVol * this.mixVol;
+};
+
+Deck.prototype.initViz = function() {
+  if (this.analyser) return;
+  try {
+    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const stream = this.audio.captureStream ? this.audio.captureStream() : this.audio.mozCaptureStream();
+    const source = this.audioCtx.createMediaStreamSource(stream);
+    this.analyser = this.audioCtx.createAnalyser();
+    this.analyser.fftSize = 64;
+    source.connect(this.analyser);
+    this.animateViz();
+  } catch(e) { console.log('Viz init failed:', e); }
+};
+
+Deck.prototype.animateViz = function() {
+  const self = this;
+  if (!self.analyser) return;
+  const data = new Uint8Array(self.analyser.frequencyBinCount);
+  self.analyser.getByteFrequencyData(data);
+  self.vizBars.forEach((bar, i) => {
+    bar.style.height = Math.max(2, (data[i] || 0) / 255 * 24) + 'px';
+  });
+  requestAnimationFrame(() => self.animateViz());
+};
+
+Deck.prototype.generateWaveform = async function(url) {
+  this.waveformData = null;
+  this.waveformLoading.textContent = 'ANALYZING...';
+  this.drawWaveform();
+  try {
+    const resp = await fetch(url);
+    const buf = await resp.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const decoded = await ctx.decodeAudioData(buf);
+    ctx.close();
+    const raw = decoded.getChannelData(0);
+    const bars = 800;
+    const blockSize = Math.floor(raw.length / bars);
+    const peaks = new Float32Array(bars);
+    for (let i = 0; i < bars; i++) {
+      let max = 0;
+      const start = i * blockSize;
+      for (let j = 0; j < blockSize; j++) {
+        const v = Math.abs(raw[start + j]);
+        if (v > max) max = v;
+      }
+      peaks[i] = max;
+    }
+    this.waveformData = peaks;
+    this.waveformLoading.textContent = '';
+    this.drawWaveform();
+    this.startWaveformAnim();
+  } catch(e) {
+    console.error('Waveform failed:', e);
+    this.waveformLoading.textContent = '';
+  }
+};
+
+Deck.prototype.drawWaveform = function() {
+  const canvas = this.waveformCanvas;
+  const ctx = this.waveformCtx;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = this.waveformSection.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+  if (!this.waveformData) return;
+
+  const pct = (this.audio.duration && isFinite(this.audio.duration))
+    ? this.audio.currentTime / this.audio.duration : 0;
+  const playX = pct * w;
+  const bars = this.waveformData.length;
+  const midY = h / 2;
+  const baseColor = this.color;
+
+  for (let x = 0; x < w; x++) {
+    const idx = Math.floor((x / w) * bars);
+    const peak = this.waveformData[idx] || 0;
+    const barH = peak * midY * 0.95;
+    if (x < playX) {
+      ctx.fillStyle = 'rgba(' + baseColor + ',0.25)';
+    } else {
+      const b = 0.4 + peak * 0.6;
+      ctx.fillStyle = 'rgba(' + baseColor + ',' + b + ')';
+    }
+    ctx.fillRect(x, midY - barH, 1, barH * 2);
+  }
+  if (pct > 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(Math.floor(playX), 0, 1, h);
+  }
+};
+
+Deck.prototype.startWaveformAnim = function() {
+  if (this.waveformAnimId) cancelAnimationFrame(this.waveformAnimId);
+  const self = this;
+  function tick() { self.drawWaveform(); self.waveformAnimId = requestAnimationFrame(tick); }
+  tick();
+};
+
+Deck.prototype.seekFromWaveform = function(e) {
+  const rect = this.waveformSection.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  if (this.audio.duration && isFinite(this.audio.duration)) {
+    this.audio.currentTime = pct * this.audio.duration;
+  }
+};
+
+// ── Init decks ──
+const deckA = new Deck('deck-a', document.getElementById('audio-a'), '68,136,255');
+const deckB = new Deck('deck-b', document.getElementById('audio-b'), '255,102,68');
+
+fetch('/api/tracks').then(r => r.json()).then(data => {
+  deckA.populatePlaylist(data);
+  deckB.populatePlaylist(data);
+});
+
+// ── Mixer ──
+const faderA = document.getElementById('fader-a');
+const faderB = document.getElementById('fader-b');
+const crossfader = document.getElementById('crossfader');
+const vuA = document.getElementById('vu-a');
+const vuB = document.getElementById('vu-b');
+const deviceSelect = document.getElementById('device-select');
+let selectedDeviceId = '';
+
+function updateMix() {
+  deckA.channelVol = faderA.value / 100;
+  deckB.channelVol = faderB.value / 100;
+  // Crossfader: 0=full A, 50=center, 100=full B
+  const cf = crossfader.value / 100;
+  deckA.mixVol = Math.min(1, (1 - cf) * 2);
+  deckB.mixVol = Math.min(1, cf * 2);
+  deckA.applyVolume();
+  deckB.applyVolume();
+}
+faderA.oninput = updateMix;
+faderB.oninput = updateMix;
+crossfader.oninput = updateMix;
+updateMix();
+
+// VU meters
+function updateVU() {
+  if (deckA.analyser) {
+    const d = new Uint8Array(deckA.analyser.frequencyBinCount);
+    deckA.analyser.getByteFrequencyData(d);
+    const avg = d.reduce((a,b) => a+b, 0) / d.length;
+    vuA.style.height = (avg / 255 * 100) + '%';
+  }
+  if (deckB.analyser) {
+    const d = new Uint8Array(deckB.analyser.frequencyBinCount);
+    deckB.analyser.getByteFrequencyData(d);
+    const avg = d.reduce((a,b) => a+b, 0) / d.length;
+    vuB.style.height = (avg / 255 * 100) + '%';
+  }
+  requestAnimationFrame(updateVU);
+}
+updateVU();
+
+// ── Audio device ──
 async function loadDevices() {
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
@@ -384,223 +652,18 @@ async function loadDevices() {
       opt.textContent = d.label || ('Device ' + d.deviceId.slice(0,8));
       deviceSelect.appendChild(opt);
     });
-  } catch(e) {
-    console.log('Audio device enumeration not supported or denied:', e);
-  }
+  } catch(e) { console.log('Device enum failed:', e); }
 }
 loadDevices();
 
 deviceSelect.onchange = async () => {
   selectedDeviceId = deviceSelect.value;
-  if (typeof audio.setSinkId === 'function') {
-    try {
-      await audio.setSinkId(selectedDeviceId);
-      console.log('Output device set to:', deviceSelect.options[deviceSelect.selectedIndex].textContent);
-    } catch(e) { console.error('setSinkId failed:', e); }
+  for (const deck of [deckA, deckB]) {
+    if (typeof deck.audio.setSinkId === 'function') {
+      try { await deck.audio.setSinkId(selectedDeviceId); } catch(e) {}
+    }
   }
 };
-
-async function loadTrack(idx) {
-  currentIndex = idx;
-  const name = tracks[idx];
-  const trackUrl = '/music/' + encodeURIComponent(name);
-  audio.src = trackUrl;
-  // Re-apply selected output device — must be set before play()
-  if (selectedDeviceId && typeof audio.setSinkId === 'function') {
-    try { await audio.setSinkId(selectedDeviceId); }
-    catch(e) { console.error('setSinkId on load failed:', e); }
-  }
-  audio.play();
-  titleEl.textContent = name.replace(/\\.mp3$/i, '');
-  titleEl.classList.toggle('scrolling', titleEl.textContent.length > 40);
-  highlightActive();
-  initViz();
-  generateWaveform(trackUrl);
-}
-
-function togglePlay() {
-  if (currentIndex < 0 && tracks.length > 0) { loadTrack(0); return; }
-  if (audio.paused) audio.play(); else audio.pause();
-}
-function pauseTrack() { audio.pause(); }
-function stopTrack() { audio.pause(); audio.currentTime = 0; }
-function prevTrack() { if (tracks.length === 0) return; loadTrack((currentIndex - 1 + tracks.length) % tracks.length); }
-function nextTrack() { if (tracks.length === 0) return; loadTrack((currentIndex + 1) % tracks.length); }
-
-audio.onended = () => nextTrack();
-
-audio.ontimeupdate = () => {
-  if (!seeking && audio.duration) {
-    seekBar.value = (audio.currentTime / audio.duration) * 100;
-    const m = Math.floor(audio.currentTime / 60);
-    const s = Math.floor(audio.currentTime % 60);
-    elapsedEl.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-  }
-};
-seekBar.addEventListener('pointerdown', () => { seeking = true; });
-seekBar.addEventListener('input', () => { seeking = true; });
-seekBar.addEventListener('change', () => {
-  if (audio.duration && isFinite(audio.duration)) {
-    audio.currentTime = (seekBar.value / 100) * audio.duration;
-  }
-  seeking = false;
-});
-
-audio.volume = 0.8;
-volumeBar.oninput = () => { audio.volume = volumeBar.value / 100; };
-
-function highlightActive() {
-  document.querySelectorAll('.pl-item').forEach((el, i) => {
-    el.classList.toggle('active', i === currentIndex);
-  });
-}
-
-// Use captureStream() for visualization so the <audio> element keeps
-// full control of output routing via setSinkId. We do NOT use
-// createMediaElementSource — that hijacks the element's output and
-// routes it through AudioContext.destination, breaking setSinkId.
-function initViz() {
-  if (analyser) return; // already set up
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // captureStream() taps the audio without taking over output
-    const stream = audio.captureStream ? audio.captureStream() : audio.mozCaptureStream();
-    source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 64;
-    source.connect(analyser);
-    // Do NOT connect analyser to audioCtx.destination — that would
-    // double-play the audio through the default device.
-    animateViz();
-  } catch(e) {
-    console.log('Visualizer init failed (captureStream not supported):', e);
-  }
-}
-
-function animateViz() {
-  if (!analyser) return;
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(data);
-  vizBars.forEach((bar, i) => {
-    const val = data[i] || 0;
-    bar.style.height = Math.max(2, (val / 255) * 30) + 'px';
-  });
-  requestAnimationFrame(animateViz);
-}
-
-// ── Waveform ──
-async function generateWaveform(url) {
-  waveformData = null;
-  waveformLoading.textContent = 'ANALYZING...';
-  drawWaveform();
-  try {
-    const resp = await fetch(url);
-    const arrayBuf = await resp.arrayBuffer();
-    const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const audioBuf = await decodeCtx.decodeAudioData(arrayBuf);
-    decodeCtx.close();
-
-    // Downsample to canvas-width number of bars
-    const raw = audioBuf.getChannelData(0);
-    const bars = Math.floor(waveformCanvas.width);
-    const blockSize = Math.floor(raw.length / bars);
-    const peaks = new Float32Array(bars);
-    for (let i = 0; i < bars; i++) {
-      let max = 0;
-      const start = i * blockSize;
-      for (let j = 0; j < blockSize; j++) {
-        const v = Math.abs(raw[start + j]);
-        if (v > max) max = v;
-      }
-      peaks[i] = max;
-    }
-    waveformData = peaks;
-    waveformLoading.textContent = '';
-    drawWaveform();
-    startWaveformAnim();
-  } catch(e) {
-    console.error('Waveform generation failed:', e);
-    waveformLoading.textContent = '';
-  }
-}
-
-function drawWaveform() {
-  const canvas = waveformCanvas;
-  const ctx = waveformCtx;
-  const dpr = window.devicePixelRatio || 1;
-  const rect = waveformSection.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  const w = rect.width;
-  const h = rect.height;
-
-  ctx.clearRect(0, 0, w, h);
-
-  if (!waveformData) return;
-
-  const pct = (audio.duration && isFinite(audio.duration))
-    ? audio.currentTime / audio.duration : 0;
-  const playX = pct * w;
-
-  // Resample waveformData to current width
-  const bars = waveformData.length;
-  const midY = h / 2;
-
-  for (let x = 0; x < w; x++) {
-    const idx = Math.floor((x / w) * bars);
-    const peak = waveformData[idx] || 0;
-    const barH = peak * midY * 0.95;
-
-    if (x < playX) {
-      // Played portion — darker blue
-      ctx.fillStyle = '#1a3a6a';
-    } else {
-      // Unplayed — bright blue with intensity based on amplitude
-      const brightness = 0.4 + peak * 0.6;
-      const r = Math.floor(30 * brightness);
-      const g = Math.floor(120 * brightness);
-      const b = Math.floor(255 * brightness);
-      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-    }
-
-    ctx.fillRect(x, midY - barH, 1, barH * 2);
-  }
-
-  // Playhead line
-  if (pct > 0) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(Math.floor(playX), 0, 1, h);
-  }
-}
-
-function startWaveformAnim() {
-  if (waveformAnimId) cancelAnimationFrame(waveformAnimId);
-  function tick() {
-    drawWaveform();
-    waveformAnimId = requestAnimationFrame(tick);
-  }
-  tick();
-}
-
-// Click-to-seek on waveform
-waveformSection.addEventListener('pointerdown', (e) => {
-  seeking = true;
-  seekFromWaveform(e);
-});
-waveformSection.addEventListener('pointermove', (e) => {
-  if (seeking && e.buttons > 0) seekFromWaveform(e);
-});
-waveformSection.addEventListener('pointerup', () => { seeking = false; });
-
-function seekFromWaveform(e) {
-  const rect = waveformSection.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (audio.duration && isFinite(audio.duration)) {
-    audio.currentTime = pct * audio.duration;
-    seekBar.value = pct * 100;
-  }
-}
 </script>
 </body>
 </html>`;
