@@ -91,6 +91,20 @@ const HTML_PAGE = `<!DOCTYPE html>
     font-family: 'Press Start 2P', monospace; font-size: 6px;
     color: #444; margin-top: 4px;
   }
+  .bpm-display {
+    font-family: 'Press Start 2P', monospace; font-size: 10px;
+    text-shadow: 0 0 6px currentColor; letter-spacing: 1px;
+  }
+  .deck-a .bpm-display { color: #4488ff; }
+  .deck-b .bpm-display { color: #ff6644; }
+  .bpm-label {
+    font-family: 'Press Start 2P', monospace; font-size: 5px;
+    color: #555;
+  }
+  .pitch-display {
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+    color: #888;
+  }
   .viz-bar {
     position: absolute; bottom: 4px; right: 8px;
     display: flex; gap: 2px; align-items: flex-end; height: 24px;
@@ -134,6 +148,32 @@ const HTML_PAGE = `<!DOCTYPE html>
   .ctrl-btn:active { border-style: inset; background: linear-gradient(180deg, #333 0%, #555 100%); }
   .ctrl-btn.play-btn { background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 100%); width: 40px; }
   .ctrl-btn.stop-btn { background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 100%); }
+  .ctrl-btn.sync-btn {
+    background: linear-gradient(180deg, #6a5a2a 0%, #4a3a1a 100%);
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    width: 44px; color: #ee0;
+  }
+  .ctrl-btn.sync-btn.active {
+    background: linear-gradient(180deg, #8a7a2a 0%, #6a5a1a 100%);
+    box-shadow: 0 0 6px #ee0; color: #ff0;
+  }
+  .pitch-section {
+    display: flex; align-items: center; gap: 6px;
+    padding: 2px 8px 4px;
+    font-family: 'Press Start 2P', monospace; font-size: 6px; color: #666;
+  }
+  .pitch-slider {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 6px;
+    background: #1a1a2a; border: 1px inset #333;
+    outline: none; cursor: pointer;
+  }
+  .pitch-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 8px; height: 12px;
+    background: linear-gradient(135deg, #bbb, #666);
+    border: 1px solid #888; border-radius: 1px; cursor: pointer;
+  }
 
   /* Playlist */
   .playlist-header {
@@ -274,9 +314,11 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="display">
       <div class="display-row">
         <div class="track-title" data-el="title">No track loaded</div>
+        <div><span class="bpm-display" data-el="bpm">---</span> <span class="bpm-label">BPM</span></div>
       </div>
       <div class="display-row" style="margin-top:6px">
         <div class="time-display"><span data-el="elapsed">00:00</span></div>
+        <div class="pitch-display" data-el="pitch-display">0.0%</div>
         <div class="viz-bar" data-el="viz"></div>
       </div>
       <div class="bitrate-info">MP3 &bull; STEREO</div>
@@ -291,6 +333,12 @@ const HTML_PAGE = `<!DOCTYPE html>
       <button class="ctrl-btn" data-action="pause" title="Pause">&#9208;</button>
       <button class="ctrl-btn stop-btn" data-action="stop" title="Stop">&#9632;</button>
       <button class="ctrl-btn" data-action="next" title="Next">&#9197;</button>
+      <button class="ctrl-btn sync-btn" data-action="sync" title="Sync BPM">SYNC</button>
+    </div>
+    <div class="pitch-section">
+      <span>PITCH</span>
+      <input type="range" class="pitch-slider" data-el="pitch" min="-8" max="8" value="0" step="0.1">
+      <span>RST</span>
     </div>
     <div class="playlist-header">PLAYLIST</div>
     <div class="playlist" data-el="playlist"></div>
@@ -331,9 +379,11 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="display">
       <div class="display-row">
         <div class="track-title" data-el="title">No track loaded</div>
+        <div><span class="bpm-display" data-el="bpm">---</span> <span class="bpm-label">BPM</span></div>
       </div>
       <div class="display-row" style="margin-top:6px">
         <div class="time-display"><span data-el="elapsed">00:00</span></div>
+        <div class="pitch-display" data-el="pitch-display">0.0%</div>
         <div class="viz-bar" data-el="viz"></div>
       </div>
       <div class="bitrate-info">MP3 &bull; STEREO</div>
@@ -348,6 +398,12 @@ const HTML_PAGE = `<!DOCTYPE html>
       <button class="ctrl-btn" data-action="pause" title="Pause">&#9208;</button>
       <button class="ctrl-btn stop-btn" data-action="stop" title="Stop">&#9632;</button>
       <button class="ctrl-btn" data-action="next" title="Next">&#9197;</button>
+      <button class="ctrl-btn sync-btn" data-action="sync" title="Sync BPM">SYNC</button>
+    </div>
+    <div class="pitch-section">
+      <span>PITCH</span>
+      <input type="range" class="pitch-slider" data-el="pitch" min="-8" max="8" value="0" step="0.1">
+      <span>RST</span>
     </div>
     <div class="playlist-header">PLAYLIST</div>
     <div class="playlist" data-el="playlist"></div>
@@ -382,6 +438,9 @@ function Deck(id, audioEl, color) {
   this.waveformSection = el('waveform-section');
   this.waveformLoading = el('waveform-loading');
   this.playlistEl = el('playlist');
+  this.bpmEl = el('bpm');
+  this.pitchSlider = el('pitch');
+  this.pitchDisplayEl = el('pitch-display');
   this.tracks = [];
   this.currentIndex = -1;
   this.seeking = false;
@@ -392,6 +451,10 @@ function Deck(id, audioEl, color) {
   this.vizBars = [];
   this.channelVol = 0.8;
   this.mixVol = 1;
+  this.bpm = 0;
+  this.originalBpm = 0;
+  this.pitchPct = 0;
+  this.otherDeck = null;
 
   // Viz bars
   for (let i = 0; i < 12; i++) {
@@ -411,7 +474,19 @@ function Deck(id, audioEl, color) {
       else if (a === 'stop') { self.audio.pause(); self.audio.currentTime = 0; }
       else if (a === 'prev') self.skipTrack(-1);
       else if (a === 'next') self.skipTrack(1);
+      else if (a === 'sync') self.syncToOther();
     });
+  });
+
+  // Pitch slider
+  this.pitchSlider.addEventListener('input', () => {
+    self.pitchPct = parseFloat(self.pitchSlider.value);
+    self.applyPitch();
+  });
+  this.pitchSlider.addEventListener('dblclick', () => {
+    self.pitchSlider.value = 0;
+    self.pitchPct = 0;
+    self.applyPitch();
   });
 
   // Time update
@@ -505,6 +580,9 @@ Deck.prototype.animateViz = function() {
 
 Deck.prototype.generateWaveform = async function(url) {
   this.waveformData = null;
+  this.bpm = 0;
+  this.originalBpm = 0;
+  this.bpmEl.textContent = '...';
   this.waveformLoading.textContent = 'ANALYZING...';
   this.drawWaveform();
   try {
@@ -514,6 +592,8 @@ Deck.prototype.generateWaveform = async function(url) {
     const decoded = await ctx.decodeAudioData(buf);
     ctx.close();
     const raw = decoded.getChannelData(0);
+
+    // Waveform peaks
     const bars = 800;
     const blockSize = Math.floor(raw.length / bars);
     const peaks = new Float32Array(bars);
@@ -527,6 +607,17 @@ Deck.prototype.generateWaveform = async function(url) {
       peaks[i] = max;
     }
     this.waveformData = peaks;
+
+    // BPM detection
+    this.originalBpm = detectBPM(raw, decoded.sampleRate);
+    this.bpm = this.originalBpm;
+    this.bpmEl.textContent = this.bpm > 0 ? this.bpm.toFixed(1) : '---';
+
+    // Reset pitch on new track
+    this.pitchPct = 0;
+    this.pitchSlider.value = 0;
+    this.applyPitch();
+
     this.waveformLoading.textContent = '';
     this.drawWaveform();
     this.startWaveformAnim();
@@ -535,6 +626,90 @@ Deck.prototype.generateWaveform = async function(url) {
     this.waveformLoading.textContent = '';
   }
 };
+
+Deck.prototype.applyPitch = function() {
+  const rate = 1 + (this.pitchPct / 100);
+  this.audio.playbackRate = rate;
+  this.bpm = this.originalBpm * rate;
+  this.bpmEl.textContent = this.bpm > 0 ? this.bpm.toFixed(1) : '---';
+  const sign = this.pitchPct >= 0 ? '+' : '';
+  this.pitchDisplayEl.textContent = sign + this.pitchPct.toFixed(1) + '%';
+};
+
+Deck.prototype.syncToOther = function() {
+  const other = this.otherDeck;
+  if (!other || !other.bpm || !this.originalBpm) return;
+  // Calculate what playback rate we need to match the other deck's current BPM
+  const targetRate = other.bpm / this.originalBpm;
+  // Clamp to slider range (-8% to +8%)
+  const pitchPct = (targetRate - 1) * 100;
+  const clamped = Math.max(-8, Math.min(8, pitchPct));
+  this.pitchPct = clamped;
+  this.pitchSlider.value = clamped;
+  this.applyPitch();
+};
+
+// ── BPM Detection ──
+// Energy-based onset detection with autocorrelation
+function detectBPM(samples, sampleRate) {
+  // Downsample to ~11kHz for speed
+  const ds = 4;
+  const len = Math.floor(samples.length / ds);
+  const mono = new Float32Array(len);
+  for (let i = 0; i < len; i++) mono[i] = samples[i * ds];
+
+  const dsSR = sampleRate / ds;
+
+  // Compute energy in windows
+  const winSize = Math.floor(dsSR * 0.02); // 20ms windows
+  const hopSize = Math.floor(winSize / 2);
+  const numWindows = Math.floor((len - winSize) / hopSize);
+  const energy = new Float32Array(numWindows);
+  for (let i = 0; i < numWindows; i++) {
+    let sum = 0;
+    const off = i * hopSize;
+    for (let j = 0; j < winSize; j++) {
+      sum += mono[off + j] * mono[off + j];
+    }
+    energy[i] = sum / winSize;
+  }
+
+  // Onset detection: first-order difference, half-wave rectify
+  const onset = new Float32Array(numWindows);
+  for (let i = 1; i < numWindows; i++) {
+    onset[i] = Math.max(0, energy[i] - energy[i - 1]);
+  }
+
+  // Autocorrelation of onset signal
+  // Search BPM range 60-200
+  const windowsPerSec = dsSR / hopSize;
+  const minLag = Math.floor(windowsPerSec * 60 / 200); // 200 BPM
+  const maxLag = Math.floor(windowsPerSec * 60 / 60);  // 60 BPM
+  const corrLen = Math.min(onset.length, maxLag * 4);
+
+  let bestLag = minLag;
+  let bestCorr = -Infinity;
+
+  for (let lag = minLag; lag <= maxLag && lag < corrLen; lag++) {
+    let sum = 0;
+    const n = Math.min(corrLen - lag, corrLen);
+    for (let i = 0; i < n; i++) {
+      sum += onset[i] * onset[i + lag];
+    }
+    if (sum > bestCorr) {
+      bestCorr = sum;
+      bestLag = lag;
+    }
+  }
+
+  const bpm = (windowsPerSec * 60) / bestLag;
+
+  // Normalize to 70-180 range (halve or double)
+  let result = bpm;
+  while (result > 180) result /= 2;
+  while (result < 70) result *= 2;
+  return Math.round(result * 10) / 10;
+}
 
 Deck.prototype.drawWaveform = function() {
   const canvas = this.waveformCanvas;
@@ -591,6 +766,8 @@ Deck.prototype.seekFromWaveform = function(e) {
 // ── Init decks ──
 const deckA = new Deck('deck-a', document.getElementById('audio-a'), '68,136,255');
 const deckB = new Deck('deck-b', document.getElementById('audio-b'), '255,102,68');
+deckA.otherDeck = deckB;
+deckB.otherDeck = deckA;
 
 fetch('/api/tracks').then(r => r.json()).then(data => {
   deckA.populatePlaylist(data);
